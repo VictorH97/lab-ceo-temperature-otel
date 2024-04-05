@@ -36,7 +36,7 @@ func main() {
 	}()
 
 	tracer := otel.Tracer("microservice-tracer")
-	weatherServer := web.NewServerWeather("microservice-weather-request", tracer, "2083c7dd8e734e46971234222242102")
+	weatherServer := web.NewServerWeather("microservice-locale-request", "microservice-temperature-request", tracer, "2083c7dd8e734e46971234222242102")
 	router := weatherServer.CreateServerWeather()
 
 	go func() {

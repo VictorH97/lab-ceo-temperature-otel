@@ -18,9 +18,10 @@ import (
 )
 
 type ServerWeather struct {
-	WeatherAPIKey   string
-	RequestNameOTEL string
-	OTELTracer      trace.Tracer
+	WeatherAPIKey         string
+	LocaleRequestNameOTEL string
+	TempRequestNameOTEL   string
+	OTELTracer            trace.Tracer
 }
 
 type Weather struct {
@@ -40,11 +41,12 @@ type Temperatures struct {
 	TempK float64 `json:"temp_K"`
 }
 
-func NewServerWeather(requestNameOTEL string, otelTracer trace.Tracer, weatherAPIKey string) *ServerWeather {
+func NewServerWeather(localeRequestNameOTEL string, tempRequestNameOTEL string, otelTracer trace.Tracer, weatherAPIKey string) *ServerWeather {
 	return &ServerWeather{
-		RequestNameOTEL: requestNameOTEL,
-		OTELTracer:      otelTracer,
-		WeatherAPIKey:   weatherAPIKey,
+		LocaleRequestNameOTEL: localeRequestNameOTEL,
+		TempRequestNameOTEL:   tempRequestNameOTEL,
+		OTELTracer:            otelTracer,
+		WeatherAPIKey:         weatherAPIKey,
 	}
 }
 
@@ -66,8 +68,7 @@ func (h *ServerWeather) FindTemperature(w http.ResponseWriter, r *http.Request) 
 	carrier := propagation.HeaderCarrier(r.Header)
 	ctx := r.Context()
 	ctx = otel.GetTextMapPropagator().Extract(ctx, carrier)
-	_, span := h.OTELTracer.Start(ctx, h.RequestNameOTEL)
-	defer span.End()
+	ctx, spanLocale := h.OTELTracer.Start(ctx, h.LocaleRequestNameOTEL)
 
 	cepParam := r.URL.Query().Get("cep")
 	if cepParam == "" {
@@ -88,7 +89,7 @@ func (h *ServerWeather) FindTemperature(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	cep, err := GetCEPInfo(cepParam)
+	cep, err := h.GetCEPInfo(cepParam)
 	if err != nil {
 		if err.Error() == "can not find zipcode" {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -101,7 +102,12 @@ func (h *ServerWeather) FindTemperature(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	weather, err := GetWeatherInfo(cep.Localidade, h.WeatherAPIKey)
+	spanLocale.End()
+
+	_, spanTemperature := h.OTELTracer.Start(ctx, h.TempRequestNameOTEL)
+	defer spanTemperature.End()
+
+	weather, err := h.GetWeatherInfo(cep.Localidade, h.WeatherAPIKey)
 	if err != nil {
 		http.Error(w, "Error getting weather info: "+err.Error(), http.StatusBadRequest)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -125,9 +131,47 @@ func (h *ServerWeather) FindTemperature(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func GetWeatherInfo(location string, apiKey string) (*Weather, error) {
+func (h *ServerWeather) GetCEPInfo(cep string) (*ViaCEP, error) {
+	req, err := http.NewRequest("GET", "http://viacep.com.br/ws/"+cep+"/json/", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if strings.Contains(string(body), "erro") {
+		return nil, errors.New("can not find zipcode")
+	}
+
+	var cepData ViaCEP
+
+	err = json.Unmarshal(body, &cepData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cepData, nil
+}
+
+func (h *ServerWeather) GetWeatherInfo(location string, apiKey string) (*Weather, error) {
 	requestUrl := "http://api.weatherapi.com/v1/current.json?key=" + apiKey + "&q=" + url.QueryEscape(location)
-	resp, err := http.Get(requestUrl)
+
+	req, err := http.NewRequest("GET", requestUrl, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
