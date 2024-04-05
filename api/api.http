@@ -9,28 +9,21 @@ Accept-Charset: UTF-8
 }
 
 ### Request com CEP inválido (local)
-POST http://localhost:8080?cep=27525-xxx HTTP/1.1
+POST http://localhost:8080 HTTP/1.1
 Host: localhost:8080
 Content-Type: application/json
+Accept-Charset: UTF-8
 
-### Request com CEP inválido (local)
-GET http://localhost:8181?locale=São Paulo HTTP/1.1
-Host: localhost:8181
-Content-Type: application/json
+{
+    "cep": "27525-xxx"
+}
 
 ### Request com CEP inexistente (local)
-GET http://localhost:8080?cep=12345-222 HTTP/1.1
+POST http://localhost:8080 HTTP/1.1
 Host: localhost:8080
 Content-Type: application/json
+Accept-Charset: UTF-8
 
-### Request com CEP válido (Cloud Run)
-GET https://lab-temperatura-cep-cnkirmo4bq-uc.a.run.app/?cep=27525-839 HTTP/1.1
-Content-Type: application/json
-
-### Request com CEP inválido (Cloud Run)
-GET https://lab-temperatura-cep-cnkirmo4bq-uc.a.run.app/?cep=27525-xxx HTTP/1.1
-Content-Type: application/json
-
-### Request com CEP inexistente (Cloud Run)
-GET https://lab-temperatura-cep-cnkirmo4bq-uc.a.run.app?cep=12345-222 HTTP/1.1
-Content-Type: application/json
+{
+    "cep": "12345-222"
+}
